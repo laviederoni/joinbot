@@ -1,1 +1,0 @@
-worker: bash -c "source /opt/render/project/src/.venv/bin/activate && python3.11 bot.py"
