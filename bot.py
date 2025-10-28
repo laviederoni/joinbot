@@ -6,13 +6,13 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from flask import Flask
 
 # === 🔒 VARIABLES D'ENVIRONNEMENT ===
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ton token Telegram sur Render/Railway
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # Facultatif
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
-# === 🌐 Flask pour garder le bot en ligne sur Render ===
+# === 🌐 Flask (garde le bot en ligne sur Render) ===
 app = Flask(__name__)
 
 @app.route('/')
@@ -23,17 +23,19 @@ def run_web():
     port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# === 📦 Bases simples en mémoire ===
+# === 📦 Bases simples ===
 referrals = {}
 balances = {}
+users = set()
 
-# === 🔹 Commande /start ===
+# === 🔹 /start ===
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.full_name
 
-    # Vérifie s'il y a un parrain dans le lien
+    users.add(user_id)
+
     referrer_id = None
     if message.get_args():
         try:
@@ -45,7 +47,6 @@ async def start(message: types.Message):
         referrals[user_id] = referrer_id
         balances[referrer_id] = balances.get(referrer_id, 0) + 1
 
-        # 🔔 Notifie le parrain
         try:
             await bot.send_message(
                 referrer_id,
@@ -58,7 +59,6 @@ async def start(message: types.Message):
         except:
             pass
 
-    # Clavier d'accueil
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📲 Rejoindre le canal", url="https://t.me/+9O6qGVz4OOM1NTZk")],
         [InlineKeyboardButton(text="🤝 Parrainage", callback_data="referral")]
@@ -71,7 +71,7 @@ async def start(message: types.Message):
         reply_markup=keyboard
     )
 
-# === 🔹 Bouton "Parrainage" ===
+# === 🔹 Menu Parrainage ===
 @dp.callback_query_handler(lambda c: c.data == "referral")
 async def show_referral_menu(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
@@ -96,7 +96,7 @@ async def show_referral_menu(callback_query: types.CallbackQuery):
         reply_markup=keyboard
     )
 
-# === 🔹 Bouton "Retour" ===
+# === 🔹 Bouton Retour ===
 @dp.callback_query_handler(lambda c: c.data == "back_home")
 async def back_to_home(callback_query: types.CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -110,15 +110,52 @@ async def back_to_home(callback_query: types.CallbackQuery):
         reply_markup=keyboard
     )
 
-# === 🔹 Génère le clavier du menu parrainage ===
+# === 🔹 Génère le clavier ===
 def get_referral_keyboard():
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📲 Rejoindre le canal", url="https://t.me/+9O6qGVz4OOM1NTZk")],
         [InlineKeyboardButton(text="🤝 Mon lien de parrainage", callback_data="referral")]
     ])
-    return keyboard
 
-# === 🚀 Lancement du bot ===
+# === 👑 Commande admin : /stats ===
+@dp.message_handler(commands=['stats'])
+async def stats(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return await message.reply("🚫 Tu n'es pas autorisé à voir ces stats.")
+
+    total_users = len(users)
+    total_referrals = len(referrals)
+    total_balance = sum(balances.values())
+
+    await message.reply(
+        f"📊 *Statistiques du Bot*\n\n"
+        f"👥 Utilisateurs : {total_users}\n"
+        f"🔗 Parrainages : {total_referrals}\n"
+        f"💰 Total distribué : {total_balance}€",
+        parse_mode="Markdown"
+    )
+
+# === 👑 Commande admin : /broadcast ===
+@dp.message_handler(commands=['broadcast'])
+async def broadcast(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return await message.reply("🚫 Tu n'es pas autorisé à envoyer des messages globaux.")
+
+    text = message.text.replace("/broadcast", "").strip()
+    if not text:
+        return await message.reply("📝 Utilisation : `/broadcast ton_message`", parse_mode="Markdown")
+
+    count = 0
+    for uid in list(users):
+        try:
+            await bot.send_message(uid, text)
+            count += 1
+        except:
+            pass
+
+    await message.reply(f"✅ Message envoyé à {count} utilisateurs.")
+
+# === 🚀 Lancement ===
 if __name__ == "__main__":
     threading.Thread(target=run_web).start()
     executor.start_polling(dp, skip_updates=True)
