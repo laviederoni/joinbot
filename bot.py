@@ -1,7 +1,6 @@
 import os
 import threading
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
 from aiogram.utils import executor
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from flask import Flask
@@ -13,7 +12,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # Facultatif
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
-# === 🌐 Flask pour keep-alive sur Render ===
+# === 🌐 Flask pour garder le bot en ligne sur Render ===
 app = Flask(__name__)
 
 @app.route('/')
@@ -24,16 +23,17 @@ def run_web():
     port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# === 📦 Base simple en mémoire ===
+# === 📦 Bases simples en mémoire ===
 referrals = {}
 balances = {}
 
 # === 🔹 Commande /start ===
-@dp.message(CommandStart())
+@dp.message_handler(commands=['start'])
 async def start(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.full_name
 
+    # Vérifie s'il y a un parrain dans le lien
     referrer_id = None
     if message.get_args():
         try:
@@ -45,7 +45,7 @@ async def start(message: types.Message):
         referrals[user_id] = referrer_id
         balances[referrer_id] = balances.get(referrer_id, 0) + 1
 
-        # 🔔 Notification au parrain
+        # 🔔 Notifie le parrain
         try:
             await bot.send_message(
                 referrer_id,
@@ -72,7 +72,7 @@ async def start(message: types.Message):
     )
 
 # === 🔹 Bouton "Parrainage" ===
-@dp.callback_query(lambda c: c.data == "referral")
+@dp.callback_query_handler(lambda c: c.data == "referral")
 async def show_referral_menu(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     ref_link = f"https://t.me/joinleak2techbot?start={user_id}"
@@ -97,7 +97,7 @@ async def show_referral_menu(callback_query: types.CallbackQuery):
     )
 
 # === 🔹 Bouton "Retour" ===
-@dp.callback_query(lambda c: c.data == "back_home")
+@dp.callback_query_handler(lambda c: c.data == "back_home")
 async def back_to_home(callback_query: types.CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📲 Rejoindre le canal", url="https://t.me/+9O6qGVz4OOM1NTZk")],
